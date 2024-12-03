@@ -146,6 +146,18 @@ extern "C" {
 }
 
 /*------------------------------------------------------------------------*/
+
+#if defined(_MSC_VER) || defined(__MINGW32__)
+#include "../win-support/my_limits.h"
+#include "../win-support/my_signal.h"
+#include "../win-support/sys/my_resource.h"
+#endif
+
+#ifdef __MINGW32__
+#include <sys/mman.h>
+#endif
+
+/*------------------------------------------------------------------------*/
 namespace CaDiCaL { // All except 'main' below.
 /*------------------------------------------------------------------------*/
 
@@ -2699,6 +2711,9 @@ void Trace::init_child_signal_handlers () {
 
 int Trace::fork_and_execute () {
 
+  // WINDOWS DO NOT SUPPORT FORK
+  // TODO: Get alternative
+  #if !defined(_MSC_VER) && !defined(__MINGW32__)
   cerr << flush;
   pid_t child = mobical.donot.fork ? 0 : fork ();
   int res = 0;
@@ -2759,6 +2774,33 @@ int Trace::fork_and_execute () {
     if (!mobical.donot.fork)
       exit (0);
   }
+
+  #else
+
+  int res = 0;
+  init_child_signal_handlers ();
+  dup2 (1, 3);
+  dup2 (2, 4);
+  int null = open ("/dev/null", O_WRONLY);
+  assert (null);
+  dup2 (null, 1);
+  dup2 (null, 2);
+  execute ();
+  close (1);
+  close (2);
+  close (null);
+  dup2 (3, 1);
+  dup2 (4, 2);
+  close (3);
+  close (4);
+  if (mobical.donot.fork)
+    mobical.mock_pointer = nullptr;
+  reset_child_signal_handlers ();
+
+  if (!mobical.donot.fork)
+    exit (0);
+
+  #endif
 
   return res;
 }
